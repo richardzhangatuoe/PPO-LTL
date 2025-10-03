@@ -11,25 +11,25 @@ pip install safety-gymnasium
 
 ## Quick Start
 
-Navigate to the `CRL/` directory for training:
+**Important:** Run all commands from the project root directory and set PYTHONPATH:
 
 ```bash
-cd CRL
+export PYTHONPATH="$PWD/src:$PWD/CRL:$PYTHONPATH"
 ```
 
 ### Train PPO (Baseline)
 ```bash
-python train_ppo.py --algorithm PPO --env ZoneEnv-v0 --seed 100 --total-steps 200000 --n-envs 4
+python CRL/train_ppo.py --algorithm PPO --env ZoneEnv-v0 --seed 100 --total-steps 200000 --n-envs 4
 ```
 
 ### Train PPO-Shield (with action shielding)
 ```bash
-python train_ppo.py --algorithm PPOShield --env ZoneEnv-v0 --seed 100 --total-steps 200000 --n-envs 4
+python CRL/train_ppo.py --algorithm PPOShield --env ZoneEnv-v0 --seed 100 --total-steps 200000 --n-envs 4
 ```
 
 ### Train PPO-LTL (with LTL constraints)
 ```bash
-python train_ppo.py --algorithm PPOLag --env ZoneEnv-v0 --seed 100 --total-steps 200000 --n-envs 4 --formula "(!blue U green) & F yellow" --finite --cost-limit 0.05 --lagrangian-lr 0.01
+python CRL/train_ppo.py --algorithm PPOLag --env ZoneEnv-v0 --seed 100 --total-steps 200000 --n-envs 4 --formula "(!blue U green) & F yellow" --finite --cost-limit 0.05 --lagrangian-lr 0.01
 ```
 
 ## Configuration

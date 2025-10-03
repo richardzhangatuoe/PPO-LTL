@@ -9,26 +9,26 @@ from gymnasium.core import WrapperObsType
 
 class SafetyGymWrapper(gym.Wrapper):
     """
-    作用：
-      - 在 obs["goal"]["propositions"] 暴露颜色 AP 列表（供 LDBA 构造和一致性检查）
-      - 在 info["propositions"] 暴露“当前为真”的颜色命题集合（从 info['cost_zones_*'] 推断）
-      - 在 info["hit_wall"] 暴露是否撞墙（从 info['cost_ltl_walls']/info['cost_walls'] 推断）
-    注意：
-      - 不要在这里做安全惩罚的 reward shaping（让 PPO-Lagrange 通过 cost 约束）
-      - 如需“撞墙立即终止”，可在这里把 terminated=True
+    purpose:
+      - expose the color AP list in obs["goal"]["propositions"] (for LDBA construction and consistency check)
+      - expose the "current true" color propositions in info["propositions"] (inferred from info['cost_zones_*'])
+      - expose whether the wall is hit in info["hit_wall"] (inferred from info['cost_ltl_walls']/info['cost_walls'])
+    note:
+      - do not do safety penalty reward shaping here (let PPO-Lagrange through cost constraints)
+      - if you need to terminate immediately when hitting the wall, you can set terminated=True here
     """
 
     def __init__(self, env: gym.Env):
         super().__init__(env)
         self.colors: List[str] = []
-        # 仅当底层是 Safety* 环境时，启用启发式映射；ZoneEnv 不启用
+        # only enable the heuristic mapping when the underlying environment is Safety*; ZoneEnv does not enable
         try:
             env_id = getattr(getattr(self.env, "spec", None), "id", "") or ""
         except Exception:
             env_id = ""
         self._enable_safetygym_mapping = env_id.startswith("Safety")
 
-    # ---------- 工具 ----------
+    # ---------- tools ----------
     @staticmethod
     def _infer_colors_from_info(info: dict) -> List[str]:
         keys = [k for k in info.keys() if k.startswith("cost_zones_")]
@@ -40,7 +40,7 @@ class SafetyGymWrapper(gym.Wrapper):
     ) -> Tuple[WrapperObsType, dict[str, Any]]:
         obs, info = self.env.reset(seed=seed, options=options)
 
-        # 1) 推断颜色 AP 列表（推断失败则用默认兜底）
+        # 1) infer the color AP list (use default fallback if inference fails)
         if not self.colors:
             inferred = self._infer_colors_from_info(info)
             if not inferred and hasattr(self.env, "colors"):
@@ -52,32 +52,32 @@ class SafetyGymWrapper(gym.Wrapper):
                 inferred = ["blue", "green", "yellow", "red"]
             self.colors = inferred
 
-        # 2) 确保观察空间是字典格式，并在 obs["goal"]["propositions"] 暴露 AP 列表
+        # 2) ensure the observation space is a dictionary format, and expose the AP list in obs["goal"]["propositions"]
         if not isinstance(obs, dict):
             obs = {"obs": obs}
         
-        # 确保 goal 字段存在并包含 propositions
+        # ensure the goal field exists and contains propositions
         if "goal" not in obs:
             obs["goal"] = {}
         goal = dict(obs["goal"])
         goal["propositions"] = list(self.colors)
         obs["goal"] = goal
         
-        # 确保 wall_sensor 字段存在
+        # ensure the wall_sensor field exists
         if "wall_sensor" not in obs:
             obs["wall_sensor"] = np.array([0, 0, 0, 0], dtype=np.int64)
 
-        # 3) 初始化 info 字段
+        # 3) initialize the info fields
         info["propositions"] = set()
         info.setdefault("hit_wall", False)
         return obs, info
 
     def step(self, action):
         out = self.env.step(action)
-        # 兼容两种返回格式：5元组和6元组（obs, reward[, cost], terminated, truncated, info）
+        # compatible with two return formats: 5-tuple and 6-tuple (obs, reward[, cost], terminated, truncated, info)
         if len(out) == 6:
             obs, reward, cost, terminated, truncated, info = out
-            # 统一把 cost 写入 info
+            # unify the cost into info
             try:
                 info["cost"] = float(cost)
             except Exception:
@@ -86,7 +86,7 @@ class SafetyGymWrapper(gym.Wrapper):
             obs, reward, terminated, truncated, info = out
             info.setdefault("cost", 0.0)
 
-        # 强制 reward 为标量
+        # force the reward to be a scalar
         try:
             import numpy as _np
             if not _np.isscalar(reward):
@@ -96,43 +96,43 @@ class SafetyGymWrapper(gym.Wrapper):
         except Exception:
             reward = float(reward)
 
-        # 确保观察空间是字典格式
+        # ensure the observation space is a dictionary format
         if not isinstance(obs, dict):
             obs = {"obs": obs}
         
-        # 确保 goal 字段存在并包含 propositions
+        # ensure the goal field exists and contains propositions
         if "goal" not in obs:
             obs["goal"] = {}
         goal = dict(obs["goal"])
         goal["propositions"] = list(self.colors)
         obs["goal"] = goal
         
-        # 确保 wall_sensor 字段存在
+        # ensure the wall_sensor field exists
         if "wall_sensor" not in obs:
             obs["wall_sensor"] = np.array([0, 0, 0, 0], dtype=np.int64)
 
-        # (A) 当前为真的颜色命题（进入某色圆区）
+        # (A) the active propositions (entering a color circle)
         active: Set[str] = set()
-        # 优先：原本来自 ZoneEnv 的 cost_zones_* 信号
+        # priority: the cost_zones_* signal originally from ZoneEnv
         if self.colors:
             for c in self.colors:
                 if info.get(f"cost_zones_{c}", 0) > 0:
                     active.add(c)
-        # 仅对 Safety* 环境启用启发式映射
+        # only enable the heuristic mapping when the underlying environment is Safety*
         if self._enable_safetygym_mapping:
-            # - 任意 cost_* > 0 视作 blue（不安全）
+            # - any cost_* > 0 is considered blue (unsafe)
             try:
                 any_cost = any((k.startswith("cost_") and float(info.get(k, 0)) > 0) for k in info.keys())
             except Exception:
                 any_cost = False
-            # 明确兼容常见键：cost_hazards / cost_sum
+            # explicitly compatible with common keys: cost_hazards / cost_sum
             try:
                 any_cost = any_cost or float(info.get("cost_hazards", 0)) > 0 or float(info.get("cost_sum", 0)) > 0
             except Exception:
                 pass
             if any_cost:
                 active.add("blue")
-            # - 成功/接近目标 视作 green（安全达成）
+            # - success/goal_met is considered green (safe)
             goal_hit = bool(info.get("success", False) or info.get("goal_met", False))
             goal_close = False
             try:
@@ -145,7 +145,7 @@ class SafetyGymWrapper(gym.Wrapper):
                 active.add("green")
         info["propositions"] = active
 
-        # (B) 硬安全：撞墙（或通用碰撞）
+        # (B) hard safety: hit the wall (or general collision)
         hit_wall = bool(
             info.get("cost_ltl_walls", 0) > 0
             or info.get("cost_walls", 0) > 0

@@ -35,7 +35,7 @@ Alternatively, start CARLA server manually:
 
 ### Train PPO (Baseline)
 ```bash
-python train.py --config crl_ppo_vanilla_seed1 --total_timesteps 1000000 --device cuda:0 --port 2000 --start_carla --no_render
+python train.py --config crl_ppo_vanilla_seed1 --total_timesteps 100000 --device cuda:0 --port 2000 --start_carla --no_render
 ```
 
 ### Train PPO-Shield (with action shielding)

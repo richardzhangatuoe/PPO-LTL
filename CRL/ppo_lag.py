@@ -215,7 +215,6 @@ class PPOLagrangian(PPO):
             n_envs=self.n_envs,
         )
 
-    # 让 save()/load() 把成本分支一并保存/恢复
     def _get_torch_save_params(self):
         state_dicts, tensors = super()._get_torch_save_params()
         state_dicts = [n for n in state_dicts if n != "policy.optimizer"]
